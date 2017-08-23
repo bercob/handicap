@@ -163,6 +163,10 @@ def get_select(table_name):
 		print "unknown table to select"
 		sys.exit(1)
 
+def get_output_path_with_timestamp(output_path):
+	filename, file_extension = os.path.splitext(output_path)
+	return "%s.%s%s" % (filename, time.strftime("%Y%m%d-%H%M%S"), file_extension)
+
 def build_pdf(table_name, output_path):
 	styles = init_styles()
 	
@@ -221,9 +225,11 @@ def main(m_args=None):
 			
 			store_rows(rows)
 			
-			build_pdf(get_table_name(rows), options.output_path)
+			output_path_with_timestamp = get_output_path_with_timestamp(options.output_path)
+
+			build_pdf(get_table_name(rows), output_path_with_timestamp)
 			
-			open_pdf(options.output_path)
+			open_pdf(output_path_with_timestamp)
 			break #for debuging
 			time.sleep(options.frequency)
 		except (IOError, OSError), (errno, strerror):
