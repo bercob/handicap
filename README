@@ -1,0 +1,15 @@
+Usage: ./handicap.py <exported_file_from_swissmanager>
+
+handicap chess generator
+
+Options:
+  -h, --help            show this help message and exit
+  -o OUTPUT_PATH, --output-path=OUTPUT_PATH
+                        default output pdf file (default is
+                        'output/handicap.pdf')
+  -d DELIMITER, --delimiter=DELIMITER
+                        params delimiter in <exported_file_from_swissmanager>
+                        (default is ';')
+  -f FREQUENCY, --frequency=FREQUENCY
+                        check frequency in sec (default is 5)
+
