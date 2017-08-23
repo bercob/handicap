@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import optparse, sys, webbrowser, os, time, signal
+import optparse, sys, webbrowser, os, time, signal, logging
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, A4, landscape
 from reportlab.pdfbase import pdfmetrics
@@ -10,10 +10,14 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import sqlite3
 
-# constants; TODO: move them to json config
+# config; TODO: move them out
+VERSION = "1.0.0"
+AUTHOR = "Balogh Peter <bercob@gmail.com>"
+DEF_SM_EXPORTED_FILE_PATH = "sm_exported_files/Exp.TXT"
 DB_PATH = "db/handicap.db"
 FONTS_PATH = "fonts"
 DEF_OUTPUT_PATH = "output/handicap.pdf"
+LOG_FILE_PATH = "log/handicap.log"
 DEF_DELIMITER = ";"
 DEF_CHECK_FREQUENCY = 5
 PLAYERS_TABLE_NAME = "players"
@@ -23,6 +27,7 @@ PLAYERS_COLS = ["id integer", "full_name text", "title text", "national_id text"
 "first_name text", "academic_title text"]
 ROUNDS_COLS = ["round integer", "board integer", "white_national_id text", "black_national_id text", "white_player_id integer", "black_player_id integer", "white_result text", "black_result text", 
 "loss_by_default text", "result text", "amount text", "white_res_rtg text", "black_res_rtg text"]
+# end of config
 
 def signal_handler(signal, frame):
     sys.exit(0)
@@ -30,20 +35,28 @@ def signal_handler(signal, frame):
 def help(parser):
 	parser.print_help()
 
+def set_logging():
+	logging.basicConfig(filename = LOG_FILE_PATH, level = logging.INFO, format = "%(asctime)s %(message)s")
+	sh = logging.StreamHandler(sys.stdout)
+	sh.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+	logging.getLogger().addHandler(sh)
+
 def parse_arguments(m_args):
-	parser = optparse.OptionParser(usage = __file__ + " <exported_file_from_swissmanager>\n\n" + "handicap chess generator")
+	parser = optparse.OptionParser(usage = "%s\n\nhandicap chess generator\n\nauthor: %s" % (__file__, AUTHOR))
+	parser.add_option("-e", "--exported-file-path", default = DEF_SM_EXPORTED_FILE_PATH, help = "swissmanager exported file path (default is '%s')" % DEF_SM_EXPORTED_FILE_PATH)
 	parser.add_option("-o", "--output-path", default = DEF_OUTPUT_PATH, help = "default output pdf file (default is '%s')" % DEF_OUTPUT_PATH)
 	parser.add_option("-d", "--delimiter", default = DEF_DELIMITER, help = "params delimiter in <exported_file_from_swissmanager> (default is '%s')" % DEF_DELIMITER)
 	parser.add_option("-f", "--frequency", default = DEF_CHECK_FREQUENCY, help = "check frequency in sec (default is %d)" % DEF_CHECK_FREQUENCY)
+	parser.add_option("-v", "--version", action="store_true", help = "get version", default = False)
 	(options, args) = parser.parse_args()
 	
 	if m_args is not None:
 		args = m_args
-	
-	if len(args) != 1:
-		help(parser)
-		sys.exit(1)
 
+	if options.version:
+		print VERSION
+		sys.exit(0)
+	
 	return options, args
 
 def init_styles():
@@ -51,13 +64,15 @@ def init_styles():
 	pdfmetrics.registerFont(TTFont("DejaVuSerif-Bold", "%s/DejaVuSerif-Bold.ttf" % FONTS_PATH))
 
 	styles = getSampleStyleSheet()
-	styles.add(ParagraphStyle(name="HNormal",
-                               fontName="DejaVuSerif",
-                               fontSize=12))
+	styles.add(ParagraphStyle(name = "HNormal",
+                               fontName = "DejaVuSerif",
+                               fontSize = 12,
+                               spaceAfter = 10))
 	
-	styles.add(ParagraphStyle(name="HBold",
-                               fontName="DejaVuSerif-Bold",
-                               fontSize=12))
+	styles.add(ParagraphStyle(name = "HBold",
+                               fontName = "DejaVuSerif-Bold",
+                               fontSize = 12,
+                               spaceAfter = 10))
 	return styles
 
 def is_players_table(rows):
@@ -80,7 +95,7 @@ def get_table_name(rows):
 	elif is_rounds_table(rows):
 		return ROUNDS_TABLE_NAME
 	else:
-		print "unknown imported table"
+		logging.error("unknown imported table")
 		sys.exit(1)
 
 def get_input_rows(filepath, delimiter):
@@ -111,7 +126,7 @@ def store_rows(rows):
 		elif is_rounds_table(rows):
 			c.execute("CREATE TABLE %s(%s)" % (table_name, get_cols_to_create(ROUNDS_COLS)))
 		else:
-			print "unknown table to create"
+			logging.error("unknown table to create")
 			sys.exit(1)
 	else:
 		c.execute("DELETE FROM %s" % table_name)
@@ -124,13 +139,15 @@ def store_rows(rows):
 
 	conn.close()
 
-def get_stored_rows(table_name):
+def get_stored_rows(table_name, header = False):
 	conn = get_connection()
-	c = conn.cursor()
+	cursor = conn.cursor()
 	select = get_select(table_name)
 	if select:
-		c.execute(select)
-		rows = c.fetchall()
+		cursor.execute(select)
+		rows = cursor.fetchall()
+		if header:
+			rows.insert(0, [description[0] for description in cursor.description])
 		conn.close()
 		return rows
 	else:
@@ -146,10 +163,10 @@ def get_round():
 
 def get_select(table_name):
 	if table_name == PLAYERS_TABLE_NAME:
-		return "SELECT ranking, id, full_name, points, birthdate FROM %s ORDER BY ranking ASC, id ASC" % PLAYERS_TABLE_NAME
+		return "SELECT ranking, id, full_name, points, birthdate, fide_elo, national_elo FROM %s ORDER BY ranking ASC, id ASC" % PLAYERS_TABLE_NAME
 	elif table_name == ROUNDS_TABLE_NAME:
 		if is_table_in_db(PLAYERS_TABLE_NAME):
-			return """SELECT r.board, p_white.full_name, p_black.full_name 
+			return """SELECT r.board šachovnica, p_white.full_name, p_white.fide_elo, p_white.national_elo, r.result, p_black.full_name, p_black.fide_elo, p_black.national_elo
 			FROM %s r, %s p_white, %s p_black 
 			WHERE p_white.id = r.white_player_id 
 			AND p_black.id = r.black_player_id 
@@ -157,10 +174,10 @@ def get_select(table_name):
 			ORDER BY r.board ASC
 			""" % (ROUNDS_TABLE_NAME, PLAYERS_TABLE_NAME, PLAYERS_TABLE_NAME, ROUNDS_TABLE_NAME)
 		else:
-			print "export the players"
+			logging.warning("export the players")
 			return ""
 	else:
-		print "unknown table to select"
+		logging.error("unknown table to select")
 		sys.exit(1)
 
 def get_output_path_with_timestamp(output_path):
@@ -175,7 +192,7 @@ def build_pdf(table_name, output_path):
                         topMargin = 72,bottomMargin = 18)
 	story = []
 	
-	stored_rows = get_stored_rows(table_name)
+	stored_rows = get_stored_rows(table_name, True)
 
 	if table_name == PLAYERS_TABLE_NAME:
 		story.append(Paragraph(table_name, styles["HBold"]))
@@ -189,7 +206,8 @@ def build_pdf(table_name, output_path):
 		table = Table(stored_rows)
 		
 		table.setStyle(TableStyle([
-			("FONTNAME", (0, 0), (-1, -1), "DejaVuSerif"),
+			("FONTNAME", (0, 0), (-1, 0), "DejaVuSerif-Bold"),
+			("FONTNAME", (0, 1), (-1, -1), "DejaVuSerif"),
 			("FONTSIZE", (0, 0), (-1, -1), 12),
 			("ALIGN",(0,0),(-1,-1),"LEFT")
 			]))
@@ -204,16 +222,18 @@ def get_mtime(file_path):
 	return os.stat(file_path)[8]
 
 def main(m_args=None):
-	(options, args) = parse_arguments(m_args)
+	set_logging()
 
-	input_file_path = args[0]
+	logging.info('starting')
+
+	(options, args) = parse_arguments(m_args)
 
 	mtime_last = 0
 	error = False
 
 	while True:
 		try:
-			mtime_new = get_mtime(input_file_path)
+			mtime_new = get_mtime(options.exported_file_path)
 			if mtime_new == mtime_last and not error:
 				time.sleep(options.frequency)
 				continue
@@ -221,7 +241,7 @@ def main(m_args=None):
 				mtime_last = mtime_new
 				error = False
 			
-			rows = get_input_rows(args[0], options.delimiter)
+			rows = get_input_rows(options.exported_file_path, options.delimiter)
 			
 			store_rows(rows)
 			
@@ -233,7 +253,7 @@ def main(m_args=None):
 			break #for debuging
 			time.sleep(options.frequency)
 		except (IOError, OSError), (errno, strerror):
-			print "Error(%s): %s" % (errno, strerror)
+			logging.error("Error(%s): %s" % (errno, strerror))
 			error = True
 			time.sleep(options.frequency)
 
