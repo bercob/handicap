@@ -1,0 +1,13 @@
+better_player_time;worst_player_time;diff_rating_from;diff_rating_to;better_player_min_rating;better_player_max_rating
+10;10;0;50;;
+12;8;51;100;;
+13;7;101;150;;
+14;6;151;200;;
+15;5;201;250;;
+16;4;251;300;;
+16.5;3.5;301;350;;
+17;3;351;400;;
+17.5;2.5;401;500;;
+18;2;501;650;;
+18;2;651;;;2299
+18.5;1.5;651;;2300;

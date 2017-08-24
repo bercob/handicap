@@ -17,16 +17,19 @@ DEF_SM_EXPORTED_FILE_PATH = "sm_exported_files/Exp.TXT"
 DB_PATH = "db/handicap.db"
 FONTS_PATH = "fonts"
 DEF_OUTPUT_PATH = "output/handicap.pdf"
+DEF_HANDICAPS_CONFIG_PATH = "conf/handicaps.csv"
 LOG_FILE_PATH = "log/handicap.log"
 DEF_DELIMITER = ";"
 DEF_CHECK_FREQUENCY = 5
 PLAYERS_TABLE_NAME = "players"
 ROUNDS_TABLE_NAME = "rounds"
+HANDICAPS_TABLE_NAME = "handicaps"
 PLAYERS_COLS = ["id integer", "full_name text", "title text", "national_id text", "national_elo integer", "fide_elo integer", "birthdate date", "federation text", "sex text", "category text", 
 "sk text", "club_id text", "club text", "fide_id text", "source text", "points text", "tb1 text", "tb2 text", "tb3 text", "tb4 text", "tb5 text", "ranking integer", "last_name text", 
 "first_name text", "academic_title text"]
 ROUNDS_COLS = ["round integer", "board integer", "white_national_id text", "black_national_id text", "white_player_id integer", "black_player_id integer", "white_result text", "black_result text", 
 "loss_by_default text", "result text", "amount text", "white_res_rtg text", "black_res_rtg text"]
+HANDICAP_COLS = ["better_player_time real", "worst_player_time real", "diff_rating_from integer", "diff_rating_to integer", "better_player_min_rating integer", "better_player_max_rating integer"]
 # end of config
 
 def signal_handler(signal, frame):
@@ -45,6 +48,7 @@ def parse_arguments(m_args):
 	parser = optparse.OptionParser(usage = "%s\n\nhandicap chess generator\n\nauthor: %s" % (__file__, AUTHOR))
 	parser.add_option("-e", "--exported-file-path", default = DEF_SM_EXPORTED_FILE_PATH, help = "swissmanager exported file path (default is '%s')" % DEF_SM_EXPORTED_FILE_PATH)
 	parser.add_option("-o", "--output-path", default = DEF_OUTPUT_PATH, help = "default output pdf file (default is '%s')" % DEF_OUTPUT_PATH)
+	parser.add_option("-c", "--handicaps-config-path", default = DEF_HANDICAPS_CONFIG_PATH, help = "default handicaps config file (default is '%s')" % DEF_HANDICAPS_CONFIG_PATH)
 	parser.add_option("-d", "--delimiter", default = DEF_DELIMITER, help = "params delimiter in <exported_file_from_swissmanager> (default is '%s')" % DEF_DELIMITER)
 	parser.add_option("-f", "--frequency", default = DEF_CHECK_FREQUENCY, help = "check frequency in sec (default is %d)" % DEF_CHECK_FREQUENCY)
 	parser.add_option("-v", "--version", action="store_true", help = "get version", default = False)
@@ -107,15 +111,17 @@ def get_input_rows(filepath, delimiter):
 	f_input.close()
 	return rows	
 
+def get_handicaps(filepath, delimiter):
+	rows = get_input_rows(filepath, delimiter)
+	store_rows(rows, HANDICAPS_TABLE_NAME)
+
 def get_connection():
 	return sqlite3.connect(DB_PATH)
 
 def get_cols_to_create(cols):
 	return ",".join(["%s %s" % (s.split()[0], s.split()[1]) for s in cols])
 
-def store_rows(rows):
-	table_name = get_table_name(rows)
-
+def store_rows(rows, table_name):
 	conn = get_connection()
 	conn.text_factory = lambda x: unicode(x, "utf-8", "ignore")
 	c = conn.cursor()
@@ -125,6 +131,8 @@ def store_rows(rows):
 			c.execute("CREATE TABLE %s(%s)" % (table_name, get_cols_to_create(PLAYERS_COLS)))
 		elif is_rounds_table(rows):
 			c.execute("CREATE TABLE %s(%s)" % (table_name, get_cols_to_create(ROUNDS_COLS)))
+		elif table_name == HANDICAPS_TABLE_NAME:
+			c.execute("CREATE TABLE %s(%s)" % (table_name, get_cols_to_create(HANDICAP_COLS)))
 		else:
 			logging.error("unknown table to create")
 			sys.exit(1)
@@ -176,6 +184,8 @@ def get_select(table_name):
 		else:
 			logging.warning("export the players")
 			return ""
+	elif table_name == HANDICAPS_TABLE_NAME:
+		return "SELECT * FROM %s ORDER BY diff_rating_from ASC" % HANDICAPS_TABLE_NAME
 	else:
 		logging.error("unknown table to select")
 		sys.exit(1)
@@ -241,9 +251,11 @@ def main(m_args=None):
 				mtime_last = mtime_new
 				error = False
 			
+			get_handicaps(options.handicaps_config_path, options.delimiter)
+
 			rows = get_input_rows(options.exported_file_path, options.delimiter)
 			
-			store_rows(rows)
+			store_rows(rows, get_table_name(rows))
 			
 			output_path_with_timestamp = get_output_path_with_timestamp(options.output_path)
 
