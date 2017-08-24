@@ -24,16 +24,16 @@ DEF_CHECK_FREQUENCY = 5
 PLAYERS_TABLE_NAME = "players"
 ROUNDS_TABLE_NAME = "rounds"
 HANDICAPS_TABLE_NAME = "handicaps"
-PLAYERS_COLS = ["id integer", "full_name text", "title text", "national_id text", "national_elo integer", "fide_elo integer", "birthdate date", "federation text", "sex text", "category text", 
+PLAYERS_COLS = ["id integer", "full_name text", "title text", "national_id text", "national_rating integer", "fide_rating integer", "birthdate date", "federation text", "sex text", "category text", 
 "sk text", "club_id text", "club text", "fide_id text", "source text", "points text", "tb1 text", "tb2 text", "tb3 text", "tb4 text", "tb5 text", "ranking integer", "last_name text", 
 "first_name text", "academic_title text"]
 ROUNDS_COLS = ["round integer", "board integer", "white_national_id text", "black_national_id text", "white_player_id integer", "black_player_id integer", "white_result text", "black_result text", 
 "loss_by_default text", "result text", "amount text", "white_res_rtg text", "black_res_rtg text"]
-HANDICAP_COLS = ["better_player_time real", "worst_player_time real", "diff_rating_from integer", "diff_rating_to integer", "better_player_min_rating integer", "better_player_max_rating integer"]
+HANDICAP_COLS = ["better_player_time text", "worst_player_time text", "diff_rating_from integer", "diff_rating_to integer", "better_player_rating_from integer", "better_player_rating_to integer"]
 # end of config
 
 def signal_handler(signal, frame):
-    sys.exit(0)
+	sys.exit(0)
 
 def help(parser):
 	parser.print_help()
@@ -51,6 +51,7 @@ def parse_arguments(m_args):
 	parser.add_option("-c", "--handicaps-config-path", default = DEF_HANDICAPS_CONFIG_PATH, help = "default handicaps config file (default is '%s')" % DEF_HANDICAPS_CONFIG_PATH)
 	parser.add_option("-d", "--delimiter", default = DEF_DELIMITER, help = "params delimiter in <exported_file_from_swissmanager> (default is '%s')" % DEF_DELIMITER)
 	parser.add_option("-f", "--frequency", default = DEF_CHECK_FREQUENCY, help = "check frequency in sec (default is %d)" % DEF_CHECK_FREQUENCY)
+	parser.add_option("-n", "--national-rating", action="store_true", help = "calculate handicap based on national rating (else fide rating)", default = False)
 	parser.add_option("-v", "--version", action="store_true", help = "get version", default = False)
 	(options, args) = parser.parse_args()
 	
@@ -147,10 +148,10 @@ def store_rows(rows, table_name):
 
 	conn.close()
 
-def get_stored_rows(table_name, header = False):
+def get_stored_rows(table_name, national_rating, header = False):
 	conn = get_connection()
 	cursor = conn.cursor()
-	select = get_select(table_name)
+	select = get_select(table_name, national_rating)
 	if select:
 		cursor.execute(select)
 		rows = cursor.fetchall()
@@ -169,18 +170,43 @@ def get_round():
 	conn.close()
 	return round
 
-def get_select(table_name):
+def get_select(table_name, national_rating):
+	if national_rating:
+		rating = 'national_rating'
+	else:
+		rating = 'fide_rating'
+			
 	if table_name == PLAYERS_TABLE_NAME:
-		return "SELECT ranking, id, full_name, points, birthdate, fide_elo, national_elo FROM %s ORDER BY ranking ASC, id ASC" % PLAYERS_TABLE_NAME
+		return "SELECT ranking, id, full_name, points, birthdate, %s FROM %s ORDER BY ranking ASC, id ASC" % (rating, PLAYERS_TABLE_NAME)
 	elif table_name == ROUNDS_TABLE_NAME:
 		if is_table_in_db(PLAYERS_TABLE_NAME):
-			return """SELECT r.board šachovnica, p_white.full_name, p_white.fide_elo, p_white.national_elo, r.result, p_black.full_name, p_black.fide_elo, p_black.national_elo
-			FROM %s r, %s p_white, %s p_black 
-			WHERE p_white.id = r.white_player_id 
-			AND p_black.id = r.black_player_id 
-			AND r.round = (SELECT max(round) FROM %s)
-			ORDER BY r.board ASC
-			""" % (ROUNDS_TABLE_NAME, PLAYERS_TABLE_NAME, PLAYERS_TABLE_NAME, ROUNDS_TABLE_NAME)
+			return """SELECT r.board, p_white.full_name, p_white.%(rating)s, 
+						(SELECT 
+							CASE WHEN p_white.%(rating)s > p_black.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
+							FROM %(handicaps_table_name)s h 
+							WHERE abs(p_white.%(rating)s - p_black.%(rating)s) BETWEEN h.diff_rating_from AND h.diff_rating_to AND 
+								((p_white.%(rating)s > p_black.%(rating)s AND p_white.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to)
+									OR
+								(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
+							LIMIT 1
+						) white_handicap,
+						r.result,
+						(SELECT 
+							CASE WHEN p_black.%(rating)s > p_white.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
+							FROM %(handicaps_table_name)s h 
+							WHERE abs(p_white.%(rating)s - p_black.%(rating)s) BETWEEN h.diff_rating_from AND h.diff_rating_to AND
+								((p_white.%(rating)s > p_black.%(rating)s AND p_white.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to)
+									OR
+								(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
+							LIMIT 1
+						) black_handicap,
+						p_black.full_name, p_black.%(rating)s
+								FROM %(rounds_table_name)s r, %(players_table_name)s p_white, %(players_table_name)s p_black 
+								WHERE p_white.id = r.white_player_id 
+								AND p_black.id = r.black_player_id
+								AND r.round = (SELECT max(round) FROM %(rounds_table_name)s)
+								ORDER BY r.board ASC
+					""" % { 'rating' : rating, 'handicaps_table_name' : HANDICAPS_TABLE_NAME, 'rounds_table_name' : ROUNDS_TABLE_NAME, 'players_table_name' : PLAYERS_TABLE_NAME }
 		else:
 			logging.warning("export the players")
 			return ""
@@ -194,7 +220,7 @@ def get_output_path_with_timestamp(output_path):
 	filename, file_extension = os.path.splitext(output_path)
 	return "%s.%s%s" % (filename, time.strftime("%Y%m%d-%H%M%S"), file_extension)
 
-def build_pdf(table_name, output_path):
+def build_pdf(table_name, output_path, national_rating):
 	styles = init_styles()
 	
 	doc = SimpleDocTemplate(output_path, pagesize = landscape(A4),
@@ -202,7 +228,7 @@ def build_pdf(table_name, output_path):
                         topMargin = 72,bottomMargin = 18)
 	story = []
 	
-	stored_rows = get_stored_rows(table_name, True)
+	stored_rows = get_stored_rows(table_name, national_rating, True)
 
 	if table_name == PLAYERS_TABLE_NAME:
 		story.append(Paragraph(table_name, styles["HBold"]))
@@ -259,10 +285,10 @@ def main(m_args=None):
 			
 			output_path_with_timestamp = get_output_path_with_timestamp(options.output_path)
 
-			build_pdf(get_table_name(rows), output_path_with_timestamp)
+			build_pdf(get_table_name(rows), output_path_with_timestamp, options.national_rating)
 			
 			open_pdf(output_path_with_timestamp)
-			break #for debuging
+			
 			time.sleep(options.frequency)
 		except (IOError, OSError), (errno, strerror):
 			logging.error("Error(%s): %s" % (errno, strerror))

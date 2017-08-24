@@ -1,15 +1,27 @@
-Usage: ./handicap.py <exported_file_from_swissmanager>
+Usage: ./handicap.py
 
 handicap chess generator
 
+author: Balogh Peter <bercob@gmail.com>
+
 Options:
   -h, --help            show this help message and exit
+  -e EXPORTED_FILE_PATH, --exported-file-path=EXPORTED_FILE_PATH
+                        swissmanager exported file path (default is
+                        'sm_exported_files/Exp.TXT')
   -o OUTPUT_PATH, --output-path=OUTPUT_PATH
                         default output pdf file (default is
                         'output/handicap.pdf')
+  -c HANDICAPS_CONFIG_PATH, --handicaps-config-path=HANDICAPS_CONFIG_PATH
+                        default handicaps config file (default is
+                        'conf/handicaps.csv')
   -d DELIMITER, --delimiter=DELIMITER
                         params delimiter in <exported_file_from_swissmanager>
                         (default is ';')
   -f FREQUENCY, --frequency=FREQUENCY
                         check frequency in sec (default is 5)
+  -n, --national-rating
+                        calculate handicap based on national rating (else fide
+                        rating)
+  -v, --version         get version
 
