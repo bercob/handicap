@@ -1,4 +1,4 @@
-better_player_time;worst_player_time;diff_rating_from;diff_rating_to;better_player_rating_from;better_player_rating_to
+worst_player_time;better_player_time;diff_rating_from;diff_rating_to;better_player_rating_from;better_player_rating_to
 10;10;0;50;0;4000
 12;8;51;100;0;4000
 13;7;101;150;0;4000

@@ -29,7 +29,11 @@ PLAYERS_COLS = ["id integer", "full_name text", "title text", "national_id text"
 "first_name text", "academic_title text"]
 ROUNDS_COLS = ["round integer", "board integer", "white_national_id text", "black_national_id text", "white_player_id integer", "black_player_id integer", "white_result text", "black_result text", 
 "loss_by_default text", "result text", "amount text", "white_res_rtg text", "black_res_rtg text"]
-HANDICAP_COLS = ["better_player_time text", "worst_player_time text", "diff_rating_from integer", "diff_rating_to integer", "better_player_rating_from integer", "better_player_rating_to integer"]
+HANDICAP_COLS = ["worst_player_time text", "better_player_time text", "diff_rating_from integer", "diff_rating_to integer", "better_player_rating_from integer", "better_player_rating_to integer"]
+
+# translation
+SK = { "id" : "číslo", "board" : "šachovnica", "full_name" : "hráč", "national_rating" : "národné elo", "white_handicap" : "čas bieleho", "result" : "výsledok", "black_handicap" : "čas čierneho", "fide_rating" : "fide elo", "ranking" : "poradie", "points" : "body", "birthdate" : "dátum narodenia", "t_rating" : "elo" }
+LANG = SK
 # end of config
 
 def signal_handler(signal, frame):
@@ -177,10 +181,12 @@ def get_select(table_name, national_rating):
 		rating = 'fide_rating'
 			
 	if table_name == PLAYERS_TABLE_NAME:
-		return "SELECT ranking, id, full_name, points, birthdate, %s FROM %s ORDER BY ranking ASC, id ASC" % (rating, PLAYERS_TABLE_NAME)
+		select_dict = { 'rating' : rating, 'players_table_name' : PLAYERS_TABLE_NAME }
+		return "SELECT ranking '%(ranking)s', id '%(id)s', full_name '%(full_name)s', points '%(points)s', birthdate '%(birthdate)s', %(rating)s '%(t_rating)s' FROM %(players_table_name)s ORDER BY ranking ASC, id ASC" % dict(select_dict.items() + LANG.items())
 	elif table_name == ROUNDS_TABLE_NAME:
 		if is_table_in_db(PLAYERS_TABLE_NAME):
-			return """SELECT r.board, p_white.full_name, p_white.%(rating)s, 
+			select_dict = { 'rating' : rating, 'handicaps_table_name' : HANDICAPS_TABLE_NAME, 'rounds_table_name' : ROUNDS_TABLE_NAME, 'players_table_name' : PLAYERS_TABLE_NAME }
+			return """SELECT r.board %(board)s, p_white.full_name %(full_name)s, p_white.%(rating)s %(t_rating)s, 
 						(SELECT 
 							CASE WHEN p_white.%(rating)s > p_black.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
 							FROM %(handicaps_table_name)s h 
@@ -189,8 +195,8 @@ def get_select(table_name, national_rating):
 									OR
 								(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
 							LIMIT 1
-						) white_handicap,
-						r.result,
+						) '%(white_handicap)s',
+						r.result '%(result)s',
 						(SELECT 
 							CASE WHEN p_black.%(rating)s > p_white.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
 							FROM %(handicaps_table_name)s h 
@@ -199,14 +205,14 @@ def get_select(table_name, national_rating):
 									OR
 								(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
 							LIMIT 1
-						) black_handicap,
-						p_black.full_name, p_black.%(rating)s
+						) '%(black_handicap)s',
+						p_black.full_name '%(full_name)s', p_black.%(rating)s '%(t_rating)s'
 								FROM %(rounds_table_name)s r, %(players_table_name)s p_white, %(players_table_name)s p_black 
 								WHERE p_white.id = r.white_player_id 
 								AND p_black.id = r.black_player_id
 								AND r.round = (SELECT max(round) FROM %(rounds_table_name)s)
 								ORDER BY r.board ASC
-					""" % { 'rating' : rating, 'handicaps_table_name' : HANDICAPS_TABLE_NAME, 'rounds_table_name' : ROUNDS_TABLE_NAME, 'players_table_name' : PLAYERS_TABLE_NAME }
+					""" % dict(select_dict.items() + LANG.items())
 		else:
 			logging.warning("export the players")
 			return ""
