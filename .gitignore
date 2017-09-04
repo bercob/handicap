@@ -1,6 +1,7 @@
 sm_exported_files/*.txt
 sm_exported_files/*.TXT
 output/*.pdf
+output/*.xlsx
 db/*.db
 log/*.log
 

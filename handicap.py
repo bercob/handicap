@@ -9,6 +9,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 import sqlite3
+import xlsxwriter
 
 # config; TODO: move them out
 VERSION = "1.0.0"
@@ -17,6 +18,7 @@ DEF_SM_EXPORTED_FILE_PATH = "sm_exported_files/Exp.TXT"
 DB_PATH = "db/handicap.db"
 FONTS_PATH = "fonts"
 DEF_OUTPUT_PATH = "output/handicap.pdf"
+ALLOWED_OUTPUT_FORMATS = ["pdf", "xlsx"]
 DEF_HANDICAPS_CONFIG_PATH = "conf/handicaps.csv"
 LOG_FILE_PATH = "log/handicap.log"
 DEF_DELIMITER = ";"
@@ -32,7 +34,7 @@ ROUNDS_COLS = ["round integer", "board integer", "white_national_id text", "blac
 HANDICAP_COLS = ["worst_player_time text", "better_player_time text", "diff_rating_from integer", "diff_rating_to integer", "better_player_rating_from integer", "better_player_rating_to integer"]
 
 # translation
-SK = { "id" : "číslo", "board" : "šachovnica", "full_name" : "hráč", "national_rating" : "národné elo", "white_handicap" : "čas bieleho", "result" : "výsledok", "black_handicap" : "čas čierneho", "fide_rating" : "fide elo", "ranking" : "poradie", "points" : "body", "birthdate" : "dátum narodenia", "t_rating" : "elo" }
+SK = { "t_id" : "číslo", "t_board" : "šachovnica", "t_full_name" : "hráč", "t_national_rating" : "národné elo", "t_white_handicap" : "čas bieleho", "t_result" : "výsledok", "t_black_handicap" : "čas čierneho", "t_fide_rating" : "fide elo", "t_ranking" : "poradie", "t_points" : "body", "t_birthdate" : "dátum narodenia", "t_rating" : "elo" }
 LANG = SK
 # end of config
 
@@ -51,7 +53,7 @@ def set_logging():
 def parse_arguments(m_args):
 	parser = optparse.OptionParser(usage = "%s\n\nhandicap chess generator\n\nauthor: %s" % (__file__, AUTHOR))
 	parser.add_option("-e", "--exported-file-path", default = DEF_SM_EXPORTED_FILE_PATH, help = "swissmanager exported file path (default is '%s')" % DEF_SM_EXPORTED_FILE_PATH)
-	parser.add_option("-o", "--output-path", default = DEF_OUTPUT_PATH, help = "default output pdf file (default is '%s')" % DEF_OUTPUT_PATH)
+	parser.add_option("-o", "--output-path", default = DEF_OUTPUT_PATH, help = "default output file (default is '%s')" % DEF_OUTPUT_PATH)
 	parser.add_option("-c", "--handicaps-config-path", default = DEF_HANDICAPS_CONFIG_PATH, help = "default handicaps config file (default is '%s')" % DEF_HANDICAPS_CONFIG_PATH)
 	parser.add_option("-d", "--delimiter", default = DEF_DELIMITER, help = "params delimiter in <exported_file_from_swissmanager> (default is '%s')" % DEF_DELIMITER)
 	parser.add_option("-f", "--frequency", default = DEF_CHECK_FREQUENCY, help = "check frequency in sec (default is %d)" % DEF_CHECK_FREQUENCY)
@@ -67,22 +69,6 @@ def parse_arguments(m_args):
 		sys.exit(0)
 	
 	return options, args
-
-def init_styles():
-	pdfmetrics.registerFont(TTFont("DejaVuSerif", "%s/DejaVuSerif.ttf" % FONTS_PATH))
-	pdfmetrics.registerFont(TTFont("DejaVuSerif-Bold", "%s/DejaVuSerif-Bold.ttf" % FONTS_PATH))
-
-	styles = getSampleStyleSheet()
-	styles.add(ParagraphStyle(name = "HNormal",
-                               fontName = "DejaVuSerif",
-                               fontSize = 12,
-                               spaceAfter = 10))
-	
-	styles.add(ParagraphStyle(name = "HBold",
-                               fontName = "DejaVuSerif-Bold",
-                               fontSize = 12,
-                               spaceAfter = 10))
-	return styles
 
 def is_players_table(rows):
 	return len(rows) > 0 and len(rows[0]) == len(PLAYERS_COLS)
@@ -182,11 +168,11 @@ def get_select(table_name, national_rating):
 			
 	if table_name == PLAYERS_TABLE_NAME:
 		select_dict = { 'rating' : rating, 'players_table_name' : PLAYERS_TABLE_NAME }
-		return "SELECT ranking '%(ranking)s', id '%(id)s', full_name '%(full_name)s', points '%(points)s', birthdate '%(birthdate)s', %(rating)s '%(t_rating)s' FROM %(players_table_name)s ORDER BY ranking ASC, id ASC" % dict(select_dict.items() + LANG.items())
+		return "SELECT ranking '%(t_ranking)s', id '%(t_id)s', full_name '%(t_full_name)s', points '%(t_points)s', birthdate '%(t_birthdate)s', %(rating)s '%(t_rating)s' FROM %(players_table_name)s ORDER BY ranking ASC, id ASC" % dict(select_dict.items() + LANG.items())
 	elif table_name == ROUNDS_TABLE_NAME:
 		if is_table_in_db(PLAYERS_TABLE_NAME):
 			select_dict = { 'rating' : rating, 'handicaps_table_name' : HANDICAPS_TABLE_NAME, 'rounds_table_name' : ROUNDS_TABLE_NAME, 'players_table_name' : PLAYERS_TABLE_NAME }
-			return """SELECT r.board %(board)s, p_white.full_name %(full_name)s, p_white.%(rating)s %(t_rating)s, 
+			return """SELECT r.board %(t_board)s, p_white.full_name %(t_full_name)s, p_white.%(rating)s %(t_rating)s, 
 						(SELECT 
 							CASE WHEN p_white.%(rating)s > p_black.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
 							FROM %(handicaps_table_name)s h 
@@ -195,8 +181,8 @@ def get_select(table_name, national_rating):
 									OR
 								(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
 							LIMIT 1
-						) '%(white_handicap)s',
-						r.result '%(result)s',
+						) '%(t_white_handicap)s',
+						r.result '%(t_result)s',
 						(SELECT 
 							CASE WHEN p_black.%(rating)s > p_white.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
 							FROM %(handicaps_table_name)s h 
@@ -205,8 +191,8 @@ def get_select(table_name, national_rating):
 									OR
 								(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
 							LIMIT 1
-						) '%(black_handicap)s',
-						p_black.full_name '%(full_name)s', p_black.%(rating)s '%(t_rating)s'
+						) '%(t_black_handicap)s',
+						p_black.full_name '%(t_full_name)s', p_black.%(rating)s '%(t_rating)s'
 								FROM %(rounds_table_name)s r, %(players_table_name)s p_white, %(players_table_name)s p_black 
 								WHERE p_white.id = r.white_player_id 
 								AND p_black.id = r.black_player_id
@@ -226,16 +212,31 @@ def get_output_path_with_timestamp(output_path):
 	filename, file_extension = os.path.splitext(output_path)
 	return "%s.%s%s" % (filename, time.strftime("%Y%m%d-%H%M%S"), file_extension)
 
-def build_pdf(table_name, output_path, national_rating):
-	styles = init_styles()
+def get_output_path_extension(output_path):
+	filename, file_extension = os.path.splitext(output_path)
+	return file_extension[1:]
+
+def build_output(table_name, output_path, national_rating):
+	stored_rows = get_stored_rows(table_name, national_rating, True)
+
+	output_format = get_output_path_extension(output_path)
+
+	if output_format == 'pdf':
+		build_pdf(table_name, output_path, national_rating, stored_rows)
+	elif output_format == 'xlsx':
+		build_xlsx(table_name, output_path, national_rating, stored_rows)
+	else:
+		logging.error("unknown output format %s; allowed formats: %s" % (output_format, ",".join(ALLOWED_OUTPUT_FORMATS)))
+		sys.exit(1)
+
+def build_pdf(table_name, output_path, national_rating, stored_rows):
+	styles = init_pdf_styles()
 	
 	doc = SimpleDocTemplate(output_path, pagesize = landscape(A4),
                         rightMargin = 72,leftMargin = 72,
                         topMargin = 72,bottomMargin = 18)
 	story = []
 	
-	stored_rows = get_stored_rows(table_name, national_rating, True)
-
 	if table_name == PLAYERS_TABLE_NAME:
 		story.append(Paragraph(table_name, styles["HBold"]))
 	elif table_name == ROUNDS_TABLE_NAME:
@@ -257,7 +258,35 @@ def build_pdf(table_name, output_path, national_rating):
 	
 	doc.build(story)		
 
-def open_pdf(output_path):
+def init_pdf_styles():
+	pdfmetrics.registerFont(TTFont("DejaVuSerif", "%s/DejaVuSerif.ttf" % FONTS_PATH))
+	pdfmetrics.registerFont(TTFont("DejaVuSerif-Bold", "%s/DejaVuSerif-Bold.ttf" % FONTS_PATH))
+
+	styles = getSampleStyleSheet()
+	styles.add(ParagraphStyle(name = "HNormal",
+                               fontName = "DejaVuSerif",
+                               fontSize = 12,
+                               spaceAfter = 10))
+	
+	styles.add(ParagraphStyle(name = "HBold",
+                               fontName = "DejaVuSerif-Bold",
+                               fontSize = 12,
+                               spaceAfter = 10))
+	return styles
+
+def build_xlsx(table_name, output_path, national_rating, stored_rows):
+	workbook = xlsxwriter.Workbook(output_path)
+	worksheet = workbook.add_worksheet()
+
+	for row, cols in enumerate(stored_rows):
+		for col, data in enumerate(cols):
+			worksheet.write(row, col, data)
+	
+	worksheet.set_column(0, col, 20)
+	
+	workbook.close()
+
+def open_output(output_path):
 	webbrowser.open(r"file:///" + os.getcwd() + "/" + output_path)
 
 def get_mtime(file_path):
@@ -267,6 +296,9 @@ def main(m_args=None):
 	set_logging()
 
 	logging.info('starting')
+	
+	reload(sys)
+	sys.setdefaultencoding('utf8')
 
 	(options, args) = parse_arguments(m_args)
 
@@ -291,9 +323,9 @@ def main(m_args=None):
 			
 			output_path_with_timestamp = get_output_path_with_timestamp(options.output_path)
 
-			build_pdf(get_table_name(rows), output_path_with_timestamp, options.national_rating)
+			build_output(get_table_name(rows), output_path_with_timestamp, options.national_rating)
 			
-			open_pdf(output_path_with_timestamp)
+			open_output(output_path_with_timestamp)
 			
 			time.sleep(options.frequency)
 		except (IOError, OSError), (errno, strerror):
