@@ -132,11 +132,15 @@ def store_rows(rows, table_name):
 
 	rows.pop(0)
 	
-	c.executemany("INSERT INTO %s VALUES (%s)" % (table_name, ",".join(["?" for s in rows[0]])), rows)
-	
-	conn.commit()
+	rowcount = 0
+	if len(rows) > 0:
+		c.executemany("INSERT INTO %s VALUES (%s)" % (table_name, ",".join(["?" for s in rows[0]])), rows)
+		conn.commit()
+		rowcount = c.rowcount
 
 	conn.close()
+
+	return rowcount
 
 def get_stored_rows(table_name, national_rating, header = False):
 	conn = get_connection()
@@ -295,10 +299,10 @@ def get_mtime(file_path):
 def main(m_args=None):
 	set_logging()
 
-	logging.info('starting')
+	logging.info("starting")
 	
 	reload(sys)
-	sys.setdefaultencoding('utf8')
+	sys.setdefaultencoding("utf8")
 
 	(options, args) = parse_arguments(m_args)
 
@@ -319,17 +323,19 @@ def main(m_args=None):
 
 			rows = get_input_rows(options.exported_file_path, options.delimiter)
 			
-			store_rows(rows, get_table_name(rows))
+			if store_rows(rows, get_table_name(rows)) > 0:
 			
-			output_path_with_timestamp = get_output_path_with_timestamp(options.output_path)
+				output_path_with_timestamp = get_output_path_with_timestamp(options.output_path)
 
-			build_output(get_table_name(rows), output_path_with_timestamp, options.national_rating)
+				build_output(get_table_name(rows), output_path_with_timestamp, options.national_rating)
 			
-			open_output(output_path_with_timestamp)
+				open_output(output_path_with_timestamp)
+			else:
+				logging.warning("there is no data to show")
 			
 			time.sleep(options.frequency)
 		except (IOError, OSError), (errno, strerror):
-			logging.error("Error(%s): %s" % (errno, strerror))
+			logging.error("error(%s): %s" % (errno, strerror))
 			error = True
 			time.sleep(options.frequency)
 
