@@ -130,7 +130,8 @@ def store_rows(rows, table_name):
 	else:
 		c.execute("DELETE FROM %s" % table_name)
 
-	rows.pop(0)
+	if len(rows) > 0:
+		rows.pop(0)
 	
 	rowcount = 0
 	if len(rows) > 0:
