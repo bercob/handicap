@@ -1,13 +1,23 @@
-Instalation on Windows
+Installation on Windows
 
 1. download and install python:
   - 64 bit version: https://www.python.org/ftp/python/2.7.13/python-2.7.13.amd64.msi
   - 32 bit version: https://www.python.org/ftp/python/2.7.13/python-2.7.13.msi
 
-2. download and install python reportlab toolkit:
-  - 64 bit version: https://pypi.python.org/packages/16/81/1811ae0761400bee1a1501dbdc3cdae30e455a00393a42be46383c6f610e/reportlab-2.7.win-amd64-py2.7.exe#md5=858a6ed69ea5e67bad84370c588becb1
-  - 32 bit version: https://pypi.python.org/packages/be/dc/9e873bbd0ee7f30f8b7b17cc10f5e806b96680b4d21ffc0cf6df8f13a6b9/reportlab-2.7.win32-py2.7.exe#md5=2bdefe98a91e076b178d3b37711e2588
+2. Download https://bootstrap.pypa.io/get-pip.py, being careful to save it as a .py file rather than .txt.
+Then, run it from the command prompt:
 
+python get-pip.py
+
+You possibly need an administrator command prompt to do this. Follow Start a Command Prompt as an Administrator (Microsoft TechNet).
+
+3. open command prompt and execute this commands:
+
+cd c:\Python27\Scripts
+pip.exe install reportlab
+pip.exe install xlsxwriter
+
+----------------------------------------------------------------------------------------
 
 Usage: ./handicap.py
 
