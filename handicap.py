@@ -34,7 +34,9 @@ ROUNDS_COLS = ["round integer", "board integer", "white_national_id text", "blac
 HANDICAP_COLS = ["worst_player_time text", "better_player_time text", "diff_rating_from integer", "diff_rating_to integer", "better_player_rating_from integer", "better_player_rating_to integer"]
 
 # translation
-SK = { "t_id" : "číslo", "t_board" : "šachovnica", "t_full_name" : "hráč", "t_national_rating" : "národné elo", "t_white_handicap" : "čas bieleho", "t_result" : "výsledok", "t_black_handicap" : "čas čierneho", "t_fide_rating" : "fide elo", "t_ranking" : "poradie", "t_points" : "body", "t_birthdate" : "dátum narodenia", "t_rating" : "elo" }
+SK = { "t_id" : "číslo", "t_board" : "šachovnica", "t_full_name" : "hráč", "t_national_rating" : "národné elo", "t_white_handicap" : "čas bieleho", "t_result" : "výsledok", 
+	"t_black_handicap" : "čas čierneho", "t_fide_rating" : "fide elo", "t_ranking" : "poradie", "t_points" : "body", "t_birthdate" : "dátum narodenia", "t_rating" : "elo", 
+	"t_white" : "biely", "t_black" : "čierny", "t_number" : "číslo", "handicap" : "čas", "color" : "farba figúr", "t_round" : "kolo", "t_players" : "hráči"}
 LANG = SK
 # end of config
 
@@ -58,6 +60,7 @@ def parse_arguments(m_args):
 	parser.add_option("-d", "--delimiter", default = DEF_DELIMITER, help = "params delimiter in <exported_file_from_swissmanager> (default is '%s')" % DEF_DELIMITER)
 	parser.add_option("-f", "--frequency", default = DEF_CHECK_FREQUENCY, help = "check frequency in sec (default is %d)" % DEF_CHECK_FREQUENCY)
 	parser.add_option("-n", "--national-rating", action="store_true", help = "calculate handicap based on national rating (else fide rating)", default = False)
+	parser.add_option("-p", "--classic-pairing", action="store_true", help = "generate classic pairing table", default = False)
 	parser.add_option("-v", "--version", action="store_true", help = "get version", default = False)
 	(options, args) = parser.parse_args()
 	
@@ -143,10 +146,10 @@ def store_rows(rows, table_name):
 
 	return rowcount
 
-def get_stored_rows(table_name, national_rating, header = False):
+def get_stored_rows(table_name, options, header = False):
 	conn = get_connection()
 	cursor = conn.cursor()
-	select = get_select(table_name, national_rating)
+	select = get_select(table_name, options)
 	if select:
 		cursor.execute(select)
 		rows = cursor.fetchall()
@@ -165,45 +168,70 @@ def get_round():
 	conn.close()
 	return round
 
-def get_select(table_name, national_rating):
-	if national_rating:
+def get_select(table_name, options):
+	if options.national_rating:
 		rating = 'national_rating'
 	else:
 		rating = 'fide_rating'
 			
 	if table_name == PLAYERS_TABLE_NAME:
 		select_dict = { 'rating' : rating, 'players_table_name' : PLAYERS_TABLE_NAME }
-		return "SELECT ranking '%(t_ranking)s', id '%(t_id)s', full_name '%(t_full_name)s', points '%(t_points)s', birthdate '%(t_birthdate)s', %(rating)s '%(t_rating)s' FROM %(players_table_name)s ORDER BY ranking ASC, id ASC" % dict(select_dict.items() + LANG.items())
+		return "SELECT ranking '%(t_ranking)s', full_name '%(t_full_name)s', points '%(t_points)s', %(rating)s '%(t_rating)s' FROM %(players_table_name)s ORDER BY ranking ASC, id ASC" % dict(select_dict.items() + LANG.items())
 	elif table_name == ROUNDS_TABLE_NAME:
 		if is_table_in_db(PLAYERS_TABLE_NAME):
 			select_dict = { 'rating' : rating, 'handicaps_table_name' : HANDICAPS_TABLE_NAME, 'rounds_table_name' : ROUNDS_TABLE_NAME, 'players_table_name' : PLAYERS_TABLE_NAME }
-			return """SELECT r.board %(t_board)s, p_white.full_name %(t_full_name)s, p_white.%(rating)s %(t_rating)s, 
-						(SELECT 
-							CASE WHEN p_white.%(rating)s > p_black.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
-							FROM %(handicaps_table_name)s h 
-							WHERE abs(p_white.%(rating)s - p_black.%(rating)s) BETWEEN h.diff_rating_from AND h.diff_rating_to AND 
-								((p_white.%(rating)s > p_black.%(rating)s AND p_white.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to)
-									OR
-								(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
-							LIMIT 1
-						) '%(t_white_handicap)s',
-						r.result '%(t_result)s',
-						(SELECT 
-							CASE WHEN p_black.%(rating)s > p_white.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
-							FROM %(handicaps_table_name)s h 
-							WHERE abs(p_white.%(rating)s - p_black.%(rating)s) BETWEEN h.diff_rating_from AND h.diff_rating_to AND
-								((p_white.%(rating)s > p_black.%(rating)s AND p_white.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to)
-									OR
-								(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
-							LIMIT 1
-						) '%(t_black_handicap)s',
-						p_black.full_name '%(t_full_name)s', p_black.%(rating)s '%(t_rating)s'
-								FROM %(rounds_table_name)s r, %(players_table_name)s p_white, %(players_table_name)s p_black 
-								WHERE p_white.id = r.white_player_id 
-								AND p_black.id = r.black_player_id
-								AND r.round = (SELECT max(round) FROM %(rounds_table_name)s)
-								ORDER BY r.board ASC
-					""" % dict(select_dict.items() + LANG.items())
+			if options.classic_pairing:
+				return """SELECT r.board %(t_board)s, p_white.full_name %(t_full_name)s, p_white.%(rating)s %(t_rating)s, 
+							(SELECT 
+								CASE WHEN p_white.%(rating)s > p_black.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
+								FROM %(handicaps_table_name)s h 
+								WHERE abs(p_white.%(rating)s - p_black.%(rating)s) BETWEEN h.diff_rating_from AND h.diff_rating_to AND 
+									((p_white.%(rating)s > p_black.%(rating)s AND p_white.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to)
+										OR
+									(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
+								LIMIT 1
+							) '%(t_white_handicap)s',
+							r.result '%(t_result)s',
+							(SELECT 
+								CASE WHEN p_black.%(rating)s > p_white.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
+								FROM %(handicaps_table_name)s h 
+								WHERE abs(p_white.%(rating)s - p_black.%(rating)s) BETWEEN h.diff_rating_from AND h.diff_rating_to AND
+									((p_white.%(rating)s > p_black.%(rating)s AND p_white.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to)
+										OR
+									(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
+								LIMIT 1
+							) '%(t_black_handicap)s',
+							p_black.full_name '%(t_full_name)s', p_black.%(rating)s '%(t_rating)s'
+									FROM %(rounds_table_name)s r, %(players_table_name)s p_white, %(players_table_name)s p_black 
+									WHERE p_white.id = r.white_player_id 
+									AND p_black.id = r.black_player_id
+									AND r.round = (SELECT max(round) FROM %(rounds_table_name)s)
+									ORDER BY r.board ASC
+						""" % dict(select_dict.items() + LANG.items())
+			else:
+				return """SELECT number '%(t_number)s', full_name '%(t_full_name)s', board '%(t_board)s', 
+							(SELECT 
+								CASE WHEN %(rating)s > opponent_rating THEN h.better_player_time ELSE h.worst_player_time END 
+								FROM handicaps h 
+								WHERE abs(%(rating)s - opponent_rating) BETWEEN h.diff_rating_from AND h.diff_rating_to AND 
+									((%(rating)s > opponent_rating AND %(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to)
+										OR
+									(opponent_rating >= %(rating)s AND opponent_rating BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
+								LIMIT 1
+							) '%(handicap)s',
+							color '%(color)s', %(rating)s '%(t_rating)s'
+						FROM (
+							SELECT (SELECT count(*) FROM players ps WHERE p.full_name >= ps.full_name) number, 
+								p.full_name, 
+								r.board,
+								CASE WHEN r.white_player_id = p.id THEN '%(t_white)s' ELSE '%(t_black)s' END color,
+								p.%(rating)s,
+								(SELECT p_opponent.%(rating)s FROM players p_opponent WHERE (r.white_player_id = p_opponent.id OR r.black_player_id = p_opponent.id) AND p_opponent.id != p.id) opponent_rating
+							FROM players p, rounds r
+							WHERE r.round = (SELECT max(round) FROM rounds)
+							AND (r.white_player_id = p.id OR r.black_player_id = p.id)
+						) ORDER BY number ASC """ % dict(select_dict.items() + LANG.items())
+
 		else:
 			logging.warning("export the players")
 			return ""
@@ -221,20 +249,20 @@ def get_output_path_extension(output_path):
 	filename, file_extension = os.path.splitext(output_path)
 	return file_extension[1:]
 
-def build_output(table_name, output_path, national_rating):
-	stored_rows = get_stored_rows(table_name, national_rating, True)
+def build_output(table_name, output_path, options):
+	stored_rows = get_stored_rows(table_name, options, True)
 
 	output_format = get_output_path_extension(output_path)
 
 	if output_format == 'pdf':
-		build_pdf(table_name, output_path, national_rating, stored_rows)
+		build_pdf(table_name, output_path, stored_rows)
 	elif output_format == 'xlsx':
-		build_xlsx(table_name, output_path, national_rating, stored_rows)
+		build_xlsx(table_name, output_path, stored_rows)
 	else:
 		logging.error("unknown output format %s; allowed formats: %s" % (output_format, ",".join(ALLOWED_OUTPUT_FORMATS)))
 		sys.exit(1)
 
-def build_pdf(table_name, output_path, national_rating, stored_rows):
+def build_pdf(table_name, output_path, stored_rows):
 	styles = init_pdf_styles()
 	
 	doc = SimpleDocTemplate(output_path, pagesize = landscape(A4),
@@ -243,10 +271,11 @@ def build_pdf(table_name, output_path, national_rating, stored_rows):
 	story = []
 	
 	if table_name == PLAYERS_TABLE_NAME:
-		story.append(Paragraph(table_name, styles["HBold"]))
+		story.append(Paragraph("%(t_players)s" % dict(LANG.items()), styles["HBold"]))
 	elif table_name == ROUNDS_TABLE_NAME:
 		if stored_rows:
-			story.append(Paragraph("round %s" % get_round(), styles["HBold"]))
+			vars = { 'round': get_round() }
+			story.append(Paragraph("%(t_round)s %(round)s" % dict(LANG.items() + vars.items()), styles["HBold"]))
 		else:
 			story.append(Paragraph("Export the players, please.", styles["HBold"]))
 	
@@ -279,7 +308,7 @@ def init_pdf_styles():
                                spaceAfter = 10))
 	return styles
 
-def build_xlsx(table_name, output_path, national_rating, stored_rows):
+def build_xlsx(table_name, output_path, stored_rows):
 	workbook = xlsxwriter.Workbook(output_path)
 	worksheet = workbook.add_worksheet()
 
@@ -328,7 +357,7 @@ def main(m_args=None):
 			
 				output_path_with_timestamp = get_output_path_with_timestamp(options.output_path)
 
-				build_output(get_table_name(rows), output_path_with_timestamp, options.national_rating)
+				build_output(get_table_name(rows), output_path_with_timestamp, options)
 			
 				open_output(output_path_with_timestamp)
 			else:
