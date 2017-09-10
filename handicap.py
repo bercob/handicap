@@ -181,7 +181,7 @@ def get_select(table_name, options):
 		if is_table_in_db(PLAYERS_TABLE_NAME):
 			select_dict = { 'rating' : rating, 'handicaps_table_name' : HANDICAPS_TABLE_NAME, 'rounds_table_name' : ROUNDS_TABLE_NAME, 'players_table_name' : PLAYERS_TABLE_NAME }
 			if options.classic_pairing:
-				return """SELECT r.board %(t_board)s, p_white.full_name %(t_full_name)s, p_white.%(rating)s %(t_rating)s, 
+				return """SELECT r.board %(t_board)s, 
 							(SELECT 
 								CASE WHEN p_white.%(rating)s > p_black.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
 								FROM %(handicaps_table_name)s h 
@@ -191,7 +191,7 @@ def get_select(table_name, options):
 									(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
 								LIMIT 1
 							) '%(t_white_handicap)s',
-							r.result '%(t_result)s',
+							p_white.full_name %(t_full_name)s, p_white.%(rating)s %(t_rating)s, p_white.points %(t_points)s,
 							(SELECT 
 								CASE WHEN p_black.%(rating)s > p_white.%(rating)s THEN h.better_player_time ELSE h.worst_player_time END 
 								FROM %(handicaps_table_name)s h 
@@ -201,12 +201,12 @@ def get_select(table_name, options):
 									(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
 								LIMIT 1
 							) '%(t_black_handicap)s',
-							p_black.full_name '%(t_full_name)s', p_black.%(rating)s '%(t_rating)s'
-									FROM %(rounds_table_name)s r, %(players_table_name)s p_white, %(players_table_name)s p_black 
-									WHERE p_white.id = r.white_player_id 
-									AND p_black.id = r.black_player_id
-									AND r.round = (SELECT max(round) FROM %(rounds_table_name)s)
-									ORDER BY r.board ASC
+							p_black.full_name '%(t_full_name)s', p_black.%(rating)s '%(t_rating)s', p_white.points %(t_points)s
+							FROM %(rounds_table_name)s r, %(players_table_name)s p_white, %(players_table_name)s p_black 
+							WHERE p_white.id = r.white_player_id 
+							AND p_black.id = r.black_player_id
+							AND r.round = (SELECT max(round) FROM %(rounds_table_name)s)
+							ORDER BY r.board ASC
 						""" % dict(select_dict.items() + LANG.items())
 			else:
 				return """SELECT number '%(t_number)s', full_name '%(t_full_name)s', board '%(t_board)s', 
