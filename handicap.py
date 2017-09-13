@@ -12,7 +12,7 @@ import sqlite3
 import xlsxwriter
 
 # config; TODO: move them out
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 AUTHOR = "Balogh Peter <bercob@gmail.com>"
 DEF_SM_EXPORTED_FILE_PATH = "sm_exported_files/Exp.TXT"
 DB_PATH = "db/handicap.db"
@@ -61,6 +61,7 @@ def parse_arguments(m_args):
 	parser.add_option("-f", "--frequency", default = DEF_CHECK_FREQUENCY, help = "check frequency in sec (default is %d)" % DEF_CHECK_FREQUENCY)
 	parser.add_option("-n", "--national-rating", action="store_true", help = "calculate handicap based on national rating (else fide rating)", default = False)
 	parser.add_option("-p", "--classic-pairing", action="store_true", help = "generate classic pairing table", default = False)
+	parser.add_option("-t", "--with-timestamp", action="store_true", help = "generate output with timestamp", default = False)
 	parser.add_option("-v", "--version", action="store_true", help = "get version", default = False)
 	(options, args) = parser.parse_args()
 	
@@ -241,9 +242,12 @@ def get_select(table_name, options):
 		logging.error("unknown table to select")
 		sys.exit(1)
 
-def get_output_path_with_timestamp(output_path):
-	filename, file_extension = os.path.splitext(output_path)
-	return "%s.%s%s" % (filename, time.strftime("%Y%m%d-%H%M%S"), file_extension)
+def get_output_path(options):
+	if options.with_timestamp:
+		filename, file_extension = os.path.splitext(options.output_path)
+		return "%s.%s%s" % (filename, time.strftime("%Y%m%d-%H%M%S"), file_extension)
+	else:
+		return options.output_path
 
 def get_output_path_extension(output_path):
 	filename, file_extension = os.path.splitext(output_path)
@@ -355,11 +359,11 @@ def main(m_args=None):
 			
 			if store_rows(rows, get_table_name(rows)) > 0:
 			
-				output_path_with_timestamp = get_output_path_with_timestamp(options.output_path)
+				output_path = get_output_path(options)
 
-				build_output(get_table_name(rows), output_path_with_timestamp, options)
+				build_output(get_table_name(rows), output_path, options)
 			
-				open_output(output_path_with_timestamp)
+				open_output(output_path)
 			else:
 				logging.warning("there is no data to show")
 			

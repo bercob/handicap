@@ -31,8 +31,8 @@ Options:
                         swissmanager exported file path (default is
                         'sm_exported_files/Exp.TXT')
   -o OUTPUT_PATH, --output-path=OUTPUT_PATH
-                        default output pdf file (default is
-                        'output/handicap.pdf')
+                        default output file (default is
+                        'output/handicap.xlsx')
   -c HANDICAPS_CONFIG_PATH, --handicaps-config-path=HANDICAPS_CONFIG_PATH
                         default handicaps config file (default is
                         'conf/handicaps.csv')
@@ -44,5 +44,8 @@ Options:
   -n, --national-rating
                         calculate handicap based on national rating (else fide
                         rating)
+  -p, --classic-pairing
+                        generate classic pairing table
+  -t, --with-timestamp  generate output with timestamp
   -v, --version         get version
 
