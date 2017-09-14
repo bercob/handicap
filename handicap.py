@@ -12,7 +12,7 @@ import sqlite3
 import xlsxwriter
 
 # config; TODO: move them out
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 AUTHOR = "Balogh Peter <bercob@gmail.com>"
 DEF_SM_EXPORTED_FILE_PATH = "sm_exported_files/Exp.TXT"
 DB_PATH = "db/handicap.db"
@@ -177,7 +177,7 @@ def get_select(table_name, options):
 			
 	if table_name == PLAYERS_TABLE_NAME:
 		select_dict = { 'rating' : rating, 'players_table_name' : PLAYERS_TABLE_NAME }
-		return "SELECT ranking '%(t_ranking)s', full_name '%(t_full_name)s', points '%(t_points)s', %(rating)s '%(t_rating)s' FROM %(players_table_name)s ORDER BY ranking ASC, id ASC" % dict(select_dict.items() + LANG.items())
+		return "SELECT ranking '%(t_ranking)s', full_name '%(t_full_name)s', points '%(t_points)s', %(rating)s '%(t_rating)s', tb1, tb2, tb3, tb4, tb5 FROM %(players_table_name)s ORDER BY ranking ASC, id ASC" % dict(select_dict.items() + LANG.items())
 	elif table_name == ROUNDS_TABLE_NAME:
 		if is_table_in_db(PLAYERS_TABLE_NAME):
 			select_dict = { 'rating' : rating, 'handicaps_table_name' : HANDICAPS_TABLE_NAME, 'rounds_table_name' : ROUNDS_TABLE_NAME, 'players_table_name' : PLAYERS_TABLE_NAME }
