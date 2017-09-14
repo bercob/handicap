@@ -12,7 +12,7 @@ import sqlite3
 import xlsxwriter
 
 # config; TODO: move them out
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 AUTHOR = "Balogh Peter <bercob@gmail.com>"
 DEF_SM_EXPORTED_FILE_PATH = "sm_exported_files/Exp.TXT"
 DB_PATH = "db/handicap.db"
@@ -242,12 +242,12 @@ def get_select(table_name, options):
 		logging.error("unknown table to select")
 		sys.exit(1)
 
-def get_output_path(options):
+def get_output_path(options, table_name):
+	filename, file_extension = os.path.splitext(options.output_path)
 	if options.with_timestamp:
-		filename, file_extension = os.path.splitext(options.output_path)
-		return "%s.%s%s" % (filename, time.strftime("%Y%m%d-%H%M%S"), file_extension)
+		return "%s_%s.%s%s" % (filename, table_name, time.strftime("%Y%m%d-%H%M%S"), file_extension)
 	else:
-		return options.output_path
+		return "%s_%s%s" % (filename, table_name, file_extension)
 
 def get_output_path_extension(output_path):
 	filename, file_extension = os.path.splitext(output_path)
@@ -359,7 +359,7 @@ def main(m_args=None):
 			
 			if store_rows(rows, get_table_name(rows)) > 0:
 			
-				output_path = get_output_path(options)
+				output_path = get_output_path(options, get_table_name(rows))
 
 				build_output(get_table_name(rows), output_path, options)
 			
