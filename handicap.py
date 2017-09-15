@@ -12,7 +12,7 @@ import sqlite3
 import xlsxwriter
 
 # config; TODO: move them out
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 AUTHOR = "Balogh Peter <bercob@gmail.com>"
 DEF_SM_EXPORTED_FILE_PATH = "sm_exported_files/Exp.TXT"
 DB_PATH = "db/handicap.db"
@@ -62,6 +62,7 @@ def parse_arguments(m_args):
 	parser.add_option("-n", "--national-rating", action="store_true", help = "calculate handicap based on national rating (else fide rating)", default = False)
 	parser.add_option("-p", "--classic-pairing", action="store_true", help = "generate classic pairing table", default = False)
 	parser.add_option("-t", "--with-timestamp", action="store_true", help = "generate output with timestamp", default = False)
+	parser.add_option("-a", "--auto-open", action="store_true", help = "open generated file automatically", default = False)
 	parser.add_option("-v", "--version", action="store_true", help = "get version", default = False)
 	(options, args) = parser.parse_args()
 	
@@ -363,7 +364,8 @@ def main(m_args=None):
 
 				build_output(get_table_name(rows), output_path, options)
 			
-				open_output(output_path)
+				if options.auto_open:
+					open_output(output_path)
 			else:
 				logging.warning("there is no data to show")
 			
