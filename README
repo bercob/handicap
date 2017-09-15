@@ -47,5 +47,6 @@ Options:
   -p, --classic-pairing
                         generate classic pairing table
   -t, --with-timestamp  generate output with timestamp
+  -a, --auto-open       open generated file automatically
   -v, --version         get version
 
