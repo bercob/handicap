@@ -12,7 +12,7 @@ import sqlite3
 import xlsxwriter
 
 # config; TODO: move them out
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 AUTHOR = "Balogh Peter <bercob@gmail.com>"
 DEF_SM_EXPORTED_FILE_PATH = "sm_exported_files/Exp.TXT"
 DB_PATH = "db/handicap.db"
@@ -203,7 +203,7 @@ def get_select(table_name, options):
 									(p_black.%(rating)s >= p_white.%(rating)s AND p_black.%(rating)s BETWEEN h.better_player_rating_from AND h.better_player_rating_to))
 								LIMIT 1
 							) '%(t_black_handicap)s',
-							p_black.full_name '%(t_full_name)s', p_black.%(rating)s '%(t_rating)s', p_white.points %(t_points)s
+							p_black.full_name '%(t_full_name)s', p_black.%(rating)s '%(t_rating)s', p_black.points %(t_points)s
 							FROM %(rounds_table_name)s r, %(players_table_name)s p_white, %(players_table_name)s p_black 
 							WHERE p_white.id = r.white_player_id 
 							AND p_black.id = r.black_player_id
